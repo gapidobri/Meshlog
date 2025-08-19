@@ -3,7 +3,7 @@ Web side for [MeshCore logger firmware](https://github.com/Anrijs/MeshCore/tree/
 
 ## Requirements
 - PHP
-- MySQL
+- MySQL or MariaDB
 
 ## Installation
 1. Setup MySQL database and add tables form `setup.sql`
