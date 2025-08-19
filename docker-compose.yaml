@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    ports:
+      - "80:80"
+
+  db:
+    image: mariadb
+    restart: always
+    environment:
+      MARIADB_ROOT_PASSWORD: meshlog
