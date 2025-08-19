@@ -12,3 +12,5 @@ WORKDIR /var/www/html
 
 # Copy the project code into the container
 COPY . /var/www/html
+
+RUN mv "/var/www/html/php.ini" "$PHP_INI_DIR/php.ini"
