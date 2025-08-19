@@ -5,9 +5,7 @@ FROM php:8.2-apache
 RUN docker-php-ext-install mysqli pdo pdo_mysql
 
 # Enable Apache
-RUN a2enmod rewrite
-
-RUN echo "SetEnv HTTPS on" >> /etc/apache2/apache2.conf
+# RUN a2enmod rewrite
 
 # Set the working directory
 WORKDIR /var/www/html
