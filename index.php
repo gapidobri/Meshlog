@@ -195,7 +195,7 @@ const formatedTimestamp = (d=new Date())=> {
   return `${date} ${time}`
 }
 
-var map = L.map('map').setView([56.96894, 24.14520], 10);
+var map = L.map('map').setView([46.1602094, 14.8144185], 10);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
