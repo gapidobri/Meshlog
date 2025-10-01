@@ -9,6 +9,7 @@ class MeshLogReporter extends MeshLogEntity {
     public $lat = null;
     public $lon = null;
     public $color = null;
+    public $auth = null;
 
     public static function fromDb($data, $meshlog) {
         if (!$data) return null;
@@ -22,19 +23,27 @@ class MeshLogReporter extends MeshLogEntity {
         $m->lat = $data['lat'];
         $m->lon = $data['lon'];
         $m->color = $data['color'];
+        $m->auth = $data['auth'];
 
         return $m;
     }
 
-    public function asArray() {
-        return array(
+    public function asArray($secret = false) {
+        $data = array(
             'id' => $this->getId(),
             'name' => $this->name,
             'public_key' => $this->public_key,
             'lat' => $this->lat,
             'lon' => $this->lon,
-            'color' => $this->color
+            'color' => $this->color,
         );
+
+        if ($secret) {
+            $data['auth'] = $this->auth;
+            $data['authorized'] = $this->authorized;
+        }
+
+        return $data;
     }
 
     public function updateLocation($meshlog, $lat, $lon) {
@@ -51,8 +60,24 @@ class MeshLogReporter extends MeshLogEntity {
     }
 
     public function isValid() {
-        return false; // can't save
+        if ($this->public_key == null) { $this->error = "Missing Public Key"; return false; };
+        if ($this->name == null) { $this->error = "Missing Name"; return false; };
+
+        return parent::isValid();
     }
+
+    protected function getParams() {
+        return array(
+            "name" => array($this->name, PDO::PARAM_STR),
+            "public_key" => array($this->public_key, PDO::PARAM_STR),
+            "authorized" => array($this->authorized, PDO::PARAM_STR),
+            "lat" => array($this->lat, PDO::PARAM_STR),
+            "lon" => array($this->lon, PDO::PARAM_STR),
+            "color" => array($this->color, PDO::PARAM_STR),
+            "auth" => array($this->auth, PDO::PARAM_STR),
+        );
+    }
+    
 }
 
 ?>

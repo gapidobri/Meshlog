@@ -30,13 +30,12 @@ class MeshLogAdvertisement extends MeshLogEntity {
         $m->lat = floatval($data['contact']['lat']) ?? 0.0;
         $m->lon = floatval($data['contact']['lon']) ?? 0.0;
         $m->path = $data['message']['path'] ?? null;
-        $m->snr = $data['snr'] ?: null;
-        $m->type = $data['contact']['type'] ?: 0;
-        $m->flags = $data['contact']['flags'] ?: 0;
+        $m->snr = $data['snr'] ?? null;
+        $m->type = $data['contact']['type'] ?? 0;
+        $m->flags = $data['contact']['flags'] ?? 0;
 
-        // fix latlon
-        if ($m->lat > 1000000) $m->lat /= 1000000.0;
-        if ($m->lon > 1000000) $m->lon /= 1000000.0;
+        $m->lat /= 1000000.0;
+        $m->lon /= 1000000.0;
 
         $m->sent_at = Utils::time2str($data['time']['local']) ?? null;
         $m->received_at = Utils::time2str($data['time']['sender']) ?? null;
@@ -81,25 +80,25 @@ class MeshLogAdvertisement extends MeshLogEntity {
         if ($this->contact_ref == null) return false;
         if ($this->reporter_ref == null) return false;
 
-        if ($this->name == null) { $err .= 'no name,'; }
-        if ($this->hash == null) { $err .= 'no hash,'; }
+        if ($this->name == null) { $err .= 'Missing name,'; }
+        if ($this->hash == null) { $err .= 'Missing hash,'; }
         if ($this->type != 1) {
-          if ($this->lat == null) { $err .= 'no lat,'; }
-          if ($this->lon == null) { $err .= 'no lon,'; }
+          if ($this->lat == null) { $err .= 'Missing lat,'; }
+          if ($this->lon == null) { $err .= 'Missing lon,'; }
         }
-        if ($this->snr == null) { $err .= 'no snr,'; }
-        if ($this->sent_at == null) { $err .= 'no sent_at,'; }
-        if ($this->received_at == null) { $err .= 'no received_at,'; }
+        if ($this->snr == null) { $err .= 'Missing snr,'; }
+        if ($this->sent_at == null) { $err .= 'Missing sent_at,'; }
+        if ($this->received_at == null) { $err .= 'Missing received_at,'; }
 
         if ($err) {
             error_log("Failed to save adv: $err");
-            echo $err;
+            $this->error = $err;
         }
 
         return true;
     }
 
-    public function asArray() {
+    public function asArray($secret = false) {
         $rid = null;
         $cid = null;
 

@@ -26,7 +26,7 @@ class MeshLogObject {
 }
 
 class MeshLogReporter extends MeshLogObject {}
-class MeshLogGroup extends MeshLogObject {}
+class MeshLogChannel extends MeshLogObject {}
 
 class MeshLogContact extends MeshLogObject {
     constructor(meshlog, data) {
@@ -407,11 +407,15 @@ class MeshLogContact extends MeshLogObject {
 
         if (this.flags.dupe) {
             this.dom.hash.classList.add("prio-5");
+        } if (this.isRepeater()) {
+            this.dom.hash.classList.add("prio-4");
         } else {
+            this.dom.hash.classList.remove("prio-4");
             this.dom.hash.classList.remove("prio-5");
         }
 
         this.dom.pubkey.innerText = `Public Key: ${this.data.public_key}`;
+        this.dom.container.dataset.type = this.adv.data.type;
 
         if (this.adv.data.type == 1) {
             this.dom.icon.src = "assets/img/person.svg";
@@ -541,7 +545,7 @@ class MeshLogGroupChild extends MeshLogObject {
     pathTag() { return '?'; }
 }
 
-class MeshLogGroupMessage extends MeshLogGroupChild {
+class MeshLogChannelMessage extends MeshLogGroupChild {
     pathTag() { return 'g'; }
 }
 class MeshLogDirecMessage extends MeshLogGroupChild {
@@ -724,11 +728,11 @@ class MeshLogMessageGroup extends MeshLogObject {
             this.dom.text.innerText = "Advert";
             this.dom.text.style.color = 'gray';
             hidden = !this._meshlog.settings.types.advertisements;
-        } else if (msg instanceof MeshLogGroupMessage) {
+        } else if (msg instanceof MeshLogChannelMessage) {
             this.dom.text.innerText = msg.data.message;
             this.dom.name.style.color = '#d87dff'
             this.dom.text.style.color = 'white';
-            hidden = !this._meshlog.settings.types.group_messages;
+            hidden = !this._meshlog.settings.types.channel_messages;
         } else if (msg instanceof MeshLogDirecMessage) {
             this.dom.text.innerText = msg.data.message;
             this.dom.text.style.color = 'white';
@@ -758,12 +762,12 @@ class MeshLogMessageGroup extends MeshLogObject {
 }
 
 class MeshLog {
-    constructor(map, logsid, contactsid, stypesid, sreportersid, scontactsid) {
+    constructor(map, logsid, contactsid, stypesid, sreportersid, scontactsid, errorid) {
         this.reporters = {};
         this.contacts = {};
         this.advertisements = {};
-        this.groups = {};
-        this.group_messages = {};
+        this.channels = {};
+        this.channel_messages = {};
         this.direct_messages = {};
 
         this.messages = {};
@@ -775,6 +779,7 @@ class MeshLog {
         this.link_pairs = {};
         this.dom_logs = document.getElementById(logsid);
         this.dom_contacts = document.getElementById(contactsid);
+        this.dom_error = document.getElementById(errorid);
         this.timer = false;
         this.autorefresh = 0;
 
@@ -800,8 +805,13 @@ class MeshLog {
         this.settings = {
             types: {
                 advertisements: true,
-                group_messages: true,
+                channel_messages: true,
                 direct_messages: false,
+            },
+            contactTypes: {
+                repeaters: true,
+                clients: true,
+                rooms: true,
             },
             reporters: {
 
@@ -815,8 +825,9 @@ class MeshLog {
         this.dom_settings_reporters = document.getElementById(sreportersid);
         this.dom_settings_contacts = document.getElementById(scontactsid);
 
-        this.__init_types();
-        this.__init_order();
+        this.__init_message_types();
+        this.__init_contact_order();
+        this.__init_contact_types();
 
         this.last = '2025-01-01 00:00:00';
     }
@@ -866,10 +877,18 @@ class MeshLog {
         const items = Array.from(this.dom_contacts.children);
         items.sort(fn);
         if (reverse) items.reverse();
-        items.forEach(item => this.dom_contacts.appendChild(item));
+        items.forEach(item => {
+            let type = parseInt(item.dataset.type);
+            let hidden = false;;
+            if (type == 1 && !this.settings.contactTypes.clients) { hidden = true; }
+            else if (type == 2 && !this.settings.contactTypes.repeaters) { hidden = true; }
+            else if (type == 3 && !this.settings.contactTypes.rooms) { hidden = true; }
+            item.hidden = hidden;
+            this.dom_contacts.appendChild(item)
+        });
     }
 
-    __init_order() {
+    __init_contact_order() {
         let orders = [
             {
                 name: 'Last Advert',
@@ -937,7 +956,44 @@ class MeshLog {
         this.dom_settings_contacts.appendChild(container);
     }
 
-    __init_types() {
+    __init_contact_types() {
+        const self = this;
+        this.dom_settings_contacts.appendChild(
+            this.__createCb(
+                "",
+                "assets/img/tower.svg",
+                this.settings.contactTypes.repeaters,
+                (e) => {
+                    this.settings.contactTypes.repeaters = e.target.checked;
+                    self.sortContacts();
+                }
+            )
+        );
+        this.dom_settings_contacts.appendChild(
+            this.__createCb(
+                "",
+                "assets/img/person.svg",
+                this.settings.contactTypes.clients,
+                (e) => {
+                    this.settings.contactTypes.clients = e.target.checked;
+                    self.sortContacts();
+                }
+            )
+        );
+        this.dom_settings_contacts.appendChild(
+            this.__createCb(
+                "",
+                "assets/img/group.svg",
+                this.settings.contactTypes.rooms,
+                (e) => {
+                    this.settings.contactTypes.rooms = e.target.checked;
+                    self.sortContacts();
+                }
+            )
+        );
+    }
+
+    __init_message_types() {
         const self = this;
         this.dom_settings_types.appendChild(
             this.__createCb(
@@ -953,11 +1009,11 @@ class MeshLog {
 
         this.dom_settings_types.appendChild(
             this.__createCb(
-                "Group Messages",
+                "Channel Messages",
                 "assets/img/message.png",
-                this.settings.types.group_messages,
+                this.settings.types.channel_messages,
                 (e) => {
-                    this.settings.types.group_messages = e.target.checked;
+                    this.settings.types.channel_messages = e.target.checked;
                     self.__onTypesChanged(e);
                 }
             )
@@ -1079,8 +1135,17 @@ class MeshLog {
             .then(data => onResponse(data));
     }
 
-    showError(err) {
-        alert(err);
+    showError(message, timeout=0) {
+        this.setAutorefresh(0);
+        this.dom_error.innerHTML = message;
+        this.dom_error.classList.add('show');
+
+        // Auto-hide after duration
+        if (timeout > 0) {
+           setTimeout(() => {
+                errorBar.classList.remove('show');
+            }, timeout);
+        }
     }
 
     __loadObjects(dataset, data, klass) {
@@ -1126,7 +1191,7 @@ class MeshLog {
             oldest_adv = Math.min(oldest_adv, created_at);
         });
 
-        Object.entries(this.group_messages).forEach(([k,v]) => {
+        Object.entries(this.channel_messages).forEach(([k,v]) => {
             let created_at = new Date(v.data.created_at).getTime();
             oldest_grp = Math.min(oldest_grp, created_at);
         });
@@ -1143,8 +1208,8 @@ class MeshLog {
             if (onload) onload();
         });
 
-        this.__fetchQuery({ "before_ms": oldest_grp }, 'api/v1/group_messages', data => {
-            const rep = self.__loadObjects(self.group_messages, data, MeshLogGroupMessage);
+        this.__fetchQuery({ "before_ms": oldest_grp }, 'api/v1/channel_messages', data => {
+            const rep = self.__loadObjects(self.channel_messages, data, MeshLogChannelMessage);
             if (rep.length) console.log(`${rep.length} group messages loaded`);
             self.onLoadAll();
             if (onload) onload();
@@ -1158,15 +1223,19 @@ class MeshLog {
         });
     }
 
-
     loadAll(params={}, onload=null) {
         this.__fetchQuery(params, 'api/v1/all', data => {
+            if (data.error) {
+                this.showError(data.error);
+                return;
+            }
+
             const rep1 = this.__loadObjects(this.reporters, data.reporters, MeshLogReporter);
             const rep2 = this.__loadObjects(this.contacts, data.contacts, MeshLogContact);
-            const rep4 = this.__loadObjects(this.groups, data.groups, MeshLogGroup);
+            const rep4 = this.__loadObjects(this.channels, data.channels, MeshLogChannel);
 
             const rep3 = this.__loadObjects(this.advertisements, data.advertisements, MeshLogAdvertisement);
-            const rep5 = this.__loadObjects(this.group_messages, data.group_messages, MeshLogGroupMessage);
+            const rep5 = this.__loadObjects(this.channel_messages, data.channel_messages, MeshLogChannelMessage);
             const rep6 = this.__loadObjects(this.direct_messages, data.direct_messages, MeshLogDirecMessage);
 
             if (rep1.length) console.log(`${rep1.length} reporters loaded`);
@@ -1185,7 +1254,7 @@ class MeshLog {
                     contacts: rep2,
                     groups: rep4,
                     advertisements: rep3,
-                    group_messages: rep5,
+                    channel_messages: rep5,
                     direct_messages: rep6,
                 });
             }
@@ -1208,7 +1277,7 @@ class MeshLog {
             let hashstr = contact.data.public_key.substr(0,2);
 
             // Mark dupes
-            if (hashes.hasOwnProperty(hashstr)) {
+            if (hashes.hasOwnProperty(hashstr) && contact.isRepeater()) {
                 for (let i=0;i<hashes[hashstr].length;i++) {
                     hashes[hashstr][i].flags.dupe = true;
                     hashes[hashstr][i].updateDom();
@@ -1263,7 +1332,7 @@ class MeshLog {
 
     onLoadMessages() {
         Object.entries(this.advertisements).forEach(([id,_]) => { this.addMessage(this.advertisements[id]); });
-        Object.entries(this.group_messages).forEach(([id,_]) => { this.addMessage(this.group_messages[id]); });
+        Object.entries(this.channel_messages).forEach(([id,_]) => { this.addMessage(this.channel_messages[id]); });
         Object.entries(this.direct_messages).forEach(([id,_]) => { this.addMessage(this.direct_messages[id]); });
 
         this.update();
@@ -1298,18 +1367,18 @@ class MeshLog {
         });
     }
 
-    loadGroups(params={}, onload=null) {
-        this.__fetchQuery(params, 'api/v1/groups', data => {
-            const sz = this.__loadObjects(this.groups, data, MeshLogObject);
-            console.log(`${sz} groups loaded`);
+    loadChannels(params={}, onload=null) {
+        this.__fetchQuery(params, 'api/v1/channels', data => {
+            const sz = this.__loadObjects(this.channels, data, MeshLogObject);
+            console.log(`${sz} channels loaded`);
             if (onload) onload();
         });
     }
 
-    loadGroupMessages(params={}, onload=null) {
-        this.__fetchQuery(params, 'api/v1/group_messages', data => {
-            const sz = this.__loadObjects(this.group_messages, data, MeshLogGroupMessage);
-            console.log(`${sz} group messages loaded`);
+    loadChannelMessages(params={}, onload=null) {
+        this.__fetchQuery(params, 'api/v1/channel_messages', data => {
+            const sz = this.__loadObjects(this.channel_messages, data, MeshLogChannelMessage);
+            console.log(`${sz} channels messages loaded`);
             if (onload) onload();
         });
     }
@@ -1359,12 +1428,14 @@ class MeshLog {
         if (!src || (src.adv && src.isClient())) {
             if (hashes.length > 0) {
                 Object.entries(this.contacts).forEach(([k,v]) => {
-                    if (v.hash == hashes[0] && v.adv && !v.adv.isVeryExpired()) {
-                        last.push([v.adv.data.lat, v.adv.data.lon]);
-                        if (v.marker) {
-                            this.visible_markers.push(v.marker);
-                            this.map.removeLayer(v.marker);
-                            v.marker.addTo(this.map);
+                    if (v.hash == hashes[0] && v.adv && !v.adv.isVeryExpired() && v.isRepeater()) {
+                        if (v.adv.data.lat != 0 && v.adv.data.lon != 0) {
+                            last.push([v.adv.data.lat, v.adv.data.lon]);
+                            if (v.marker) {
+                                this.visible_markers.push(v.marker);
+                                this.map.removeLayer(v.marker);
+                                v.marker.addTo(this.map);
+                            }
                         }
                     }
                 });
@@ -1385,7 +1456,9 @@ class MeshLog {
                 this.map.removeLayer(src.marker);
                 src.marker.addTo(this.map);
             }
-            last.push([src.adv.data.lat, src.adv.data.lon]);
+            if (src.adv.data.lat != 0 && src.adv.data.lon != 0) {
+                last.push([src.adv.data.lat, src.adv.data.lon]);
+            }
         }
 
         const ln_weight = 2;
@@ -1396,13 +1469,15 @@ class MeshLog {
         for (let i=0;i<hashes.length;i++) {
             let next = [];
             Object.entries(this.contacts).forEach(([k,v]) => {
-                if (v.hash == hashes[i] && v.adv && !v.adv.isVeryExpired()) {
+                if (v.hash == hashes[i] && v.adv && !v.adv.isVeryExpired() && v.isRepeater()) {
+                    let current = [v.adv.data.lat, v.adv.data.lon];
+                    if (current[0] == 0 && current[1] == 0) return;
+
                     if (v.marker) {
                         this.visible_markers.push(v.marker);
                         this.map.removeLayer(v.marker);
                         v.marker.addTo(this.map);
                     }
-                    let current = [v.adv.data.lat, v.adv.data.lon];
                     for (let j=0;j<last.length;j++) {
                         let pair_id = `${last[j][0]}-${last[j][1]}_${current[0]}-${current[1]}`;
                         if (!this.link_pairs.hasOwnProperty(pair_id)) {
@@ -1482,7 +1557,7 @@ class MeshLog {
                     new Audio('assets/audio/notif.mp3').play();
                 }
 
-                document.getElementById('favicon').setAttribute('href','faviconr.ico');
+                document.getElementById('favicon').setAttribute('href','assets/favicon/faviconr.ico');
                 document.title = `(${count}) MeshCore Log`; 
             }
         });
@@ -1506,7 +1581,7 @@ class MeshLog {
     }
 
     onNewMessage(msg) {
-        if (msg instanceof MeshLogGroupMessage || msg instanceof MeshLogDirecMessage) {
+        if (msg instanceof MeshLogChannelMessage || msg instanceof MeshLogDirecMessage) {
             const hash = msg.data.hash;
             if (!this.new_messages.hasOwnProperty(hash)) {
                 this.new_messages[hash] = [];
@@ -1517,7 +1592,7 @@ class MeshLog {
 
     clearNotifications() {
         this.new_messages = [];
-        document.getElementById('favicon').setAttribute('href','faviconw.ico');
+        document.getElementById('favicon').setAttribute('href','assets/favicon/faviconw.ico');
         document.title = `MeshCore Log`; 
     }
 

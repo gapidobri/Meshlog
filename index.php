@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link id="favicon" rel="icon" type="image/x-icon" href="faviconw.ico">
+    <link id="favicon" rel="icon" type="image/x-icon" href="assets/favicon/faviconw.ico">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
         crossorigin=""/>
@@ -11,12 +11,13 @@
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
         crossorigin=""></script>
     <script src=" https://cdn.jsdelivr.net/npm/leaflet-polylineoffset@1.1.1/leaflet.polylineoffset.min.js "></script>
-    <script src="meshlog.js"></script>
-    <link rel="stylesheet" href="style.css">
+    <script src="assets/js/meshlog.js"></script>
+    <link rel="stylesheet" href="assets/css/style.css">
     <title>MeshCore Log v1.99</title>
 </head>
 <body>
 
+<div id="error"></div>
 <div id="container">
 <div id="leftbar">
     <div class="settings" id="settings-types">
@@ -207,7 +208,8 @@ var meshlog = new MeshLog(
     "contacts",
     "settings-types",
     "settings-reporters",
-    "settings-contacts"
+    "settings-contacts",
+    "error"
 );
 meshlog.loadAll();
 meshlog.setAutorefresh(10000);

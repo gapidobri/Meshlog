@@ -1,14 +1,14 @@
 <?php
 
-class MeshLogGroup extends MeshLogEntity {
-    protected static $table = "groups";
+class MeshLogChannel extends MeshLogEntity {
+    protected static $table = "channels";
 
     public $hash = null;
     public $name = null;
     public $enabled = null;
 
     public static function fromJson($data, $meshlog) {
-        $m = new MeshLogGroup($meshlog);
+        $m = new MeshLogChannel($meshlog);
 
         $m->hash = $data['channel']['hash'] ?? '11';
         $m->name = $data['channel']['name'] ?? 'unknown';
@@ -31,13 +31,13 @@ class MeshLogGroup extends MeshLogEntity {
     }
 
     function isValid() {
-        if ($this->hash == null) return false;
-        if ($this->name == null) return false;
+        if ($this->hash == null) { $this->error = "Missing hash"; return false; }
+        if ($this->name == null) { $this->error = "Missing name"; return false; }
 
         return true;
     }
 
-    public function asArray() {
+    public function asArray($secret = false) {
         return array(
             'id' => $this->getId(),
             'hash' => $this->hasj,

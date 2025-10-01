@@ -5,21 +5,91 @@ require_once 'meshlog.entity.class.php';
 require_once 'meshlog.advertisement.class.php';
 require_once 'meshlog.contact.class.php';
 require_once 'meshlog.direct_message.class.php';
-require_once 'meshlog.group_message.class.php';
-require_once 'meshlog.group.class.php';
+require_once 'meshlog.channel_message.class.php';
+require_once 'meshlog.channel.class.php';
 require_once 'meshlog.reporter.class.php';
+require_once 'meshlog.setting.class.php';
+require_once 'meshlog.user.class.php';
 
 define("MAX_COUNT", 5000);
 define("DEFAULT_COUNT", 500);
 
 class MeshLog {
+    private $error = '';
+    private $version = 1;
+    private $settings = array(
+        MeshlogSetting::KEY_DB_VERSION => 0,
+        MeshlogSetting::KEY_MAX_CONTACT_AGE => 1814400
+    );
 
-    function __construct($pdo) {
-        $this->pdo = $pdo;
+    function __construct($config) {
+        $host = $config['host'] ?? die("Invalid db config");
+        $name = $config['database'] ?? die("Invalid db config");
+        $user = $config['user'] ?? die("Invalid db config");
+        $pass = $config['password'] ?? die("Invalid db config");
+        $this->pdo = new PDO("mysql:host=$host;dbname=$name;charset=utf8mb4", $user, $pass);
+        $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $this->loadSettings();
     }
 
     function __destruct() {
         $this->pdo = null;
+    }
+
+    function getError() {
+        return $this->error;
+    }
+
+    function loadSettings() {
+        $table = MeshLogSetting::getTable();
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) 
+                FROM information_schema.tables 
+                WHERE table_schema = DATABASE() 
+                AND table_name = :table");
+            $stmt->execute(['table' => $table]);
+
+        if ($stmt->fetchColumn() > 0) {
+            $settings = MeshLogSetting::getAll($this, array());
+            foreach ($settings['objects'] as $s) {
+                $k = $s['name'];
+                $v = $s['value'];
+                if ($k) {
+                    $this->settings[$k] = $v;
+                }
+            }
+
+            $users = MeshLogUser::countAll($this);
+            if ($users > 0) return;
+        }
+        $this->error = 'Setup not complete. Go to <a href="setup.php">setup</a>';
+    }
+
+    function getDbVersion() {
+        return $this->getConfig(MeshlogSetting::KEY_DB_VERSION, 0);
+    }
+
+    function updateAvailable() {
+        return $this->version != $this->getDbVersion();
+    }
+
+    function checkUpdates() {
+        if ($this->version != $this->getConfig(MeshlogSetting::KEY_DB_VERSION, 0)) {
+            return "Database upgrade required! <a href=\"login.php\">Login</a>";
+        };
+        return 0;
+    }
+
+    function saveSettings() {
+        MeshLogSetting::saveSettings($this, $this->settings);
+    }
+
+    function getConfig($key, $default=null) {
+        if (!isset($this->settings[$key])) return $default;
+        return $this->settings[$key];
+    }
+
+    function setConfig($key, $value) {
+        // TODO write DB
     }
 
     function authorize($data) {
@@ -126,21 +196,21 @@ class MeshLog {
         if (!$text) return $this->repError('no message');
         $name = explode(':', $text, 2)[0];
 
-        $group = MeshLogGroup::findBy("hash", $hash, $this);
+        $channel = MeshLogChannel::findBy("hash", $hash, $this);
 
-        if (!$group) {
-            $group = MeshLogGroup::fromJson($data, $this);
-            if (!$group->save($this)) return $this->repError('failed to save group');
+        if (!$channel) {
+            $channel = MeshLogChannel::fromJson($data, $this);
+            if (!$channel->save($this)) return $this->repError('failed to save channel');
         }
 
         $advertisement = MeshLogAdvertisement::findBy("name", $name, $this);
         $contact = null;
         if ($advertisement) $contact = MeshLogContact::findById($advertisement->contact_ref->getId(), $this);
 
-        $grpmsg = MeshLogGroupMessage::fromJson($data, $this);
+        $grpmsg = MeshLogChannelMessage::fromJson($data, $this);
         $grpmsg->reporter_ref = $reporter;
         $grpmsg->contact_ref = $contact;
-        $grpmsg->group_ref = $group;
+        $grpmsg->channel_ref = $channel;
 
         return $grpmsg->save($this);
     }
@@ -171,20 +241,22 @@ class MeshLog {
         );
 
         $results = MeshLogContact::getAll($this, $params);
+        $out = [];
+        $maxage = isset($params['max_age']) ? $params['max_age'] : 0;
 
-        if ($params['advertisements']) {
+        if ($params['advertisements'] || $maxage) {
             foreach ($results['objects'] as $k => $c) {
                 $id = $c['id'];
-                $ad = MeshLogAdvertisement::findBy("contact_id", $id, $this);
+                $ad = MeshLogAdvertisement::findBy("contact_id", $id, $this, array('created_at' => array('operator' => '>', 'value' => $maxage)));
                 if ($ad) {
-                    $results['objects'][$k]['advertisement'] = $ad->asArray();
-                } else {
-                    $results['objects'][$k]['advertisement'] = $ad;
+                    $c['advertisement'] = $ad->asArray();
+                    $out[] = $c;
                 }
             }
+
         }
 
-        return $results;
+        return array("objects" => $out);
     }
 
     public function getAdvertisements($params) {
@@ -192,18 +264,18 @@ class MeshLog {
         return MeshLogAdvertisement::getAll($this, $params);
     }
 
-    public function getGroups($params) {
+    public function getChannels($params) {
         $params['where'] = array();
-        return MeshLogGroup::getAll($this, $params);
+        return MeshLogChannel::getAll($this, $params);
     }
 
-    public function getGroupMessages($params) {
+    public function getChannelMessages($params) {
         $params['where'] = array();
         if (isset($params['id'])) {
-            $params['where'] = array('group_id = ' . intval($id));
+            $params['where'] = array('channel_id = ' . intval($id));
         }
 
-        return MeshLogGroupMessage::getAll($this, $params);
+        return MeshLogChannelMessage::getAll($this, $params);
     }
 
     public function getDirectMessages($params) {

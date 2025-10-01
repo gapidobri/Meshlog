@@ -4,19 +4,49 @@ class MeshLogEntity {
     protected static $table = null;
     private $meshlog = null;
     protected $_id = null;
+    protected $error = '';
 
     function __construct($meshlog) {
         $this->meshlog = $meshlog;
     }
+    public static function getTable() {
+        return static::$table;
+    }
 
-    public static function findBy($field, $value, $meshlog) {
+    public static function findBy($field, $value, $meshlog, $extra=array()) {
         if (empty($value) || empty($field) || !$meshlog) return false;
 
         $tableStr = static::$table;
         $type = is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR;
 
-        $query = $meshlog->pdo->prepare("SELECT * FROM $tableStr WHERE $field = :$field ORDER by id DESC");
-        $query->bindParam(":$field", $value, $type);
+        $conditions = ["$field = :$field"];
+        $params = [":$field" => [$value, $type]];
+
+        foreach ($extra as $key => $condition) {
+            // $condition should be an array: ['operator' => '>', 'value' => 1000]
+            if (!isset($condition['operator'], $condition['value'])) {
+                continue;
+            }
+
+            // Only allow safe operators
+            $allowedOperators = ['=', '!=', '<', '<=', '>', '>=', 'LIKE'];
+            if (!in_array($condition['operator'], $allowedOperators)) {
+                continue;
+            }
+
+            $paramName = ":extra_$key";
+            $conditions[] = "$key {$condition['operator']} $paramName";
+
+            $paramType = is_int($condition['value']) ? PDO::PARAM_INT : PDO::PARAM_STR;
+            $params[$paramName] = [$condition['value'], $paramType];
+        }
+
+        $sql = "SELECT * FROM $tableStr WHERE " . implode(' AND ', $conditions) . " ORDER BY id DESC";
+        $query = $meshlog->pdo->prepare($sql);
+        foreach ($params as $param => [$val, $ptype]) {
+            $query->bindValue($param, $val, $ptype);
+        }
+
         $query->execute();
 
         $result = $query->fetch(PDO::FETCH_ASSOC);
@@ -88,8 +118,9 @@ class MeshLogEntity {
                 $this->_id = $meshlog->pdo->lastInsertId();
             }
         } catch (PDOException $e) {
+            $this->error = $e->getMessage();
             error_log($e->getMessage());
-            echo $e->getMessage();
+            return false;
         }
 
         if ($this->isNew() && $result) {
@@ -99,7 +130,19 @@ class MeshLogEntity {
         return $result;
     }
 
-    public function asArray() {
+    public function delete() {
+        $tableStr = $this::$table;
+        $id = $this->getId();
+        $stmt = $this->meshlog->pdo->prepare("DELETE FROM $tableStr WHERE id = :id");
+        $stmt->bindParam(":id", $id, PDO::PARAM_INT);
+        if ($stmt->execute()) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public function asArray($secret=false) {
         return array();
     }
 
@@ -108,12 +151,15 @@ class MeshLogEntity {
     }
 
     public static function getAll($meshlog, $params) {
-        $offset = $params['offset'] ?: 0;
-        $count = $params['count'] ?: DEFAULT_COUNT;
-        $after_ms = $params['after_ms'] ?: 0;
-        $before_ms = $params['before_ms'] ?: 0;
+        $offset = $params['offset'] ?? 0;
+        $count = $params['count'] ?? DEFAULT_COUNT;
+        $after_ms = $params['after_ms'] ?? 0;
+        $before_ms = $params['before_ms'] ?? 0;
+        $secret = $params['secret'] ?? false;
+        $order = $params['order'] ?? 'DESC';
 
-        $where = $params['where'] ?: array();
+        $where = $params['where'] ?? array();
+        if ($order != 'ASC') $order = 'DESC';
 
         $sqlWhere = '';
         $sqlBind = array();
@@ -146,7 +192,7 @@ class MeshLogEntity {
         if ($count > MAX_COUNT) $count = MAX_COUNT;
         $tableStr = static::$table;
     
-        $query = $meshlog->pdo->prepare("SELECT * FROM $tableStr $sqlWhere ORDER BY id DESC LIMIT :offset,:count");
+        $query = $meshlog->pdo->prepare("SELECT * FROM $tableStr $sqlWhere ORDER BY id $order LIMIT :offset,:count");
         
         foreach ($sqlBind as $b) {
             if (sizeof($b) != 3) continue;
@@ -162,11 +208,22 @@ class MeshLogEntity {
         
         $objects = array();
         foreach ($result as $r) {
-            $objects[] = static::fromDb($r, $meshlog)->asArray();
+            $objects[] = static::fromDb($r, $meshlog)->asArray($secret);
         }
         return array(
             "objects" => $objects
         );
+    }
+
+    public static function countAll($meshlog) {
+        $tableStr = static::$table;
+        $stmt = $meshlog->pdo->query("SELECT COUNT(*) AS total FROM $tableStr");
+        $row = $stmt->fetch();
+        return $row['total'];
+    }
+
+    public function getError() {
+        return $this->error;
     }
 }
 

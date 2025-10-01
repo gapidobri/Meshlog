@@ -32,13 +32,11 @@ class MeshLogContact extends MeshLogEntity {
     }
 
     public function isValid() {
-        if ($this->public_key == null) { echo "no PK"; return false; };
-        if ($this->enabled == null) { echo "no EN"; return false; };
-
+        if ($this->public_key == null) { $this->error = "Missing public key"; return false; };
         return parent::isValid();
     }
 
-    public function asArray() {
+    public function asArray($secret = false) {
         return array(
             'id' => $this->getId(),
             'public_key' => $this->public_key,
