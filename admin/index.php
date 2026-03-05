@@ -30,6 +30,11 @@
                 'permissions' => $login->permissions
             );
             $_SESSION['user'] = $login;
+
+            if (isset($_GET['setup']) || isset($_POST['setup'])) {
+                header("Location: ../setup.php");
+                exit;
+            }
         }
     }
 ?>
@@ -54,6 +59,36 @@
         tr.disabled {
             text-decoration: line-through;
         }
+        input[type=color] {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            border: none;
+            width: 1.5rem;
+            height: 1.5rem;
+            border-radius: 1.5rem;
+            background: none;
+            padding: 0;
+            cursor: pointer;
+            vertical-align: bottom;
+            margin-left: 8px;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border: none;
+            border-radius: 0;
+        }
+        input[type="color"]::-moz-color-swatch {
+            border: none;
+        }
+        .logger-name {
+            margin-left: 8px;
+            padding: 2px;
+            font-size: 0.8rem;
+            border-radius: 0.35rem;
+        }
     </style>
 </head>
 <body>
@@ -73,6 +108,7 @@
                 <div class="form-group right">
                     <input type="submit" name="login" value="Login">
                 </div>
+                <input type="hidden" name="setup" value="1">
             </form>
         </section>
     </div>
@@ -107,25 +143,57 @@
             .then(response => response.json())
             .then(result => {
                 reporters.innerHTML = '';
-                result.objects.forEach(obj => addReporter(reporters, obj));
+                result.objects.forEach(obj => { addReporter(reporters, obj) });
                 addReporter(reporters, {
-                    id: 'Add', 
+                    id: 'Add',
                     name: 'New Logger',
                     public_key: '',
                     auth: '',
                     lat: '0.00000',
                     lon: '0.00000',
                     authorized: 1,
-                    color: '#ff0000'
+                    style: '{"color": "#ff0000"}',
+                    header: 'Add New new Reporter'
                 });
             });
+        }
+
+        function makeColorInput(cell, value, onchange) {
+            picker = document.createElement("input");
+            picker.type = 'color';
+            picker.value = value;
+            picker.oninput = (e) => {
+                onchange(e.target.value);
+            }
+            cell.append(picker);
+            return picker;
         }
 
         function makeInputCell(row, value, type='text') {
             let td = row.insertCell();
             let input = document.createElement("input");
-            input.oninput = () => {
+            td.append(input);
+
+            const isColor = type == 'color';
+            let picker = false;
+
+            if (isColor) {
+                type = 'text';
+                picker = document.createElement("input");
+                picker.type = 'color';
+                picker.value = value;
+                picker.oninput = (e) => {
+                    input.value = e.target.value;
+                    input.style.color = '#1976D2';
+                }
+                td.append(picker);
+            }
+
+            input.oninput = (e) => {
                 input.style.color = '#1976D2';
+                if (isColor && picker) {
+                    picker.value = e.target.value;
+                }
             }
             input.type = type;
             if (type == 'checkbox') {
@@ -133,27 +201,63 @@
             } else {
                 input.value = value;
             }
-            td.append(input);
             return input;
         }
 
         function addReporter(table, reporter) {
+            if (reporter.header ?? false) {
+                let h = document.createElement("h2");
+                h.innerText = reporter.header;
+
+                let hrow = table.insertRow();
+                let hcell = hrow.insertCell();
+                hcell.colSpan = 9;
+                hcell.append(h);
+            }
+
             const id = reporter['id'];
             let row = table.insertRow();
             row.dataset.id = id;
             let td1 = row.insertCell();
             td1.innerText = id;
 
+            let style = 0;
+            try {
+                style = JSON.parse(reporter['style']);
+            } catch {
+                console.log(reporter);
+                style = {color: reporter['style'] };
+            }
+
             let name = makeInputCell(row, reporter['name']);
             let key = makeInputCell(row, reporter['public_key']);
             let lat = makeInputCell(row, reporter['lat']);
             let lon = makeInputCell(row, reporter['lon']);
             let auth = makeInputCell(row, reporter['auth']);
-            let color = makeInputCell(row, reporter['color']);
+
+            lat.style.maxWidth = '80px';
+            lon.style.maxWidth = '80px';
+
+            let tdstyle = row.insertCell();
+            let psample = document.createElement("span")
+            psample.innerText = reporter['name'];
+            psample.classList.add('logger-name');
+            psample.style.color = style['color'];
+            psample.style.border = `solid 1px ${style['stroke'] ?? style['color']}`;
+            let pcolor = makeColorInput(tdstyle, style['color'], value => {
+                psample.style.color = value;
+            });
+            let pstroke = makeColorInput(tdstyle, style['stroke'] ?? style['color'], value => {
+                psample.style.border = `solid 1px ${value}`;
+            });
+            tdstyle.append(psample);
+
             let authorized = makeInputCell(row, reporter['authorized'], 'checkbox');
             let td2 = row.insertCell();
 
             let getReporter = () => { 
+                console.log(pcolor);
+                console.log(pcolor.value);
                 return {
                     id: id,
                     name: name.value,
@@ -162,7 +266,10 @@
                     lon: lon.value,
                     auth: auth.value,
                     authorized: authorized.checked ? 1 : 0,
-                    color: color.value
+                    style: JSON.stringify({
+                        color: pcolor.value,
+                        stroke: pstroke.value
+                    })
                 }
             };
 
@@ -205,7 +312,7 @@
                 lon: reporter.lon,
                 auth: reporter.auth,
                 authorized: reporter.authorized,
-                color: reporter.color
+                style: reporter.style
             };
 
             if (add) {

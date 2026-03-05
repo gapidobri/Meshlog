@@ -13,13 +13,17 @@ class MeshLogEntity {
         return static::$table;
     }
 
-    public static function findBy($field, $value, $meshlog, $extra=array()) {
+    public static function findBy($field, $value, $meshlog, $extra=array(), $binary=False, $forupdate=False) {
         if (empty($value) || empty($field) || !$meshlog) return false;
 
         $tableStr = static::$table;
         $type = is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR;
 
-        $conditions = ["$field = :$field"];
+        if ($type == PDO::PARAM_STR && $binary) {
+            $conditions = ["BINARY $field = :$field"];
+        } else {
+            $conditions = ["$field = :$field"];
+        }
         $params = [":$field" => [$value, $type]];
 
         foreach ($extra as $key => $condition) {
@@ -42,6 +46,7 @@ class MeshLogEntity {
         }
 
         $sql = "SELECT * FROM $tableStr WHERE " . implode(' AND ', $conditions) . " ORDER BY id DESC";
+        if ($forupdate) $sql .= " FOR UPDATE";
         $query = $meshlog->pdo->prepare($sql);
         foreach ($params as $param => [$val, $ptype]) {
             $query->bindValue($param, $val, $ptype);
@@ -156,24 +161,22 @@ class MeshLogEntity {
         $after_ms = $params['after_ms'] ?? 0;
         $before_ms = $params['before_ms'] ?? 0;
         $secret = $params['secret'] ?? false;
-        $order = $params['order'] ?? 'DESC';
 
         $where = $params['where'] ?? array();
-        if ($order != 'ASC') $order = 'DESC';
-
+        $sqlJoin = $params['join'] ?? '';
         $sqlWhere = '';
         $sqlBind = array();
 
         if ($after_ms > 0) {
             $after_ms = floor($after_ms / 1000);
-            $sqlWhere = 'WHERE created_at > FROM_UNIXTIME(:after_ms) ';
+            $sqlWhere = 'WHERE t.created_at > FROM_UNIXTIME(:after_ms) ';
         }
         if ($before_ms > 0) {
             $before_ms = floor($before_ms / 1000);
             if (strlen($sqlWhere)) {
-                $sqlWhere .= " AND created_at < FROM_UNIXTIME(:before_ms)";
+                $sqlWhere .= " AND t.created_at < FROM_UNIXTIME(:before_ms)";
             } else {
-                $sqlWhere = " WHERE created_at < FROM_UNIXTIME(:before_ms)";
+                $sqlWhere = " WHERE t.created_at < FROM_UNIXTIME(:before_ms)";
             }
         }
 
@@ -192,7 +195,7 @@ class MeshLogEntity {
         if ($count > MAX_COUNT) $count = MAX_COUNT;
         $tableStr = static::$table;
     
-        $query = $meshlog->pdo->prepare("SELECT * FROM $tableStr $sqlWhere ORDER BY id $order LIMIT :offset,:count");
+        $query = $meshlog->pdo->prepare("SELECT t.* FROM $tableStr t $sqlJoin $sqlWhere  ORDER BY t.id DESC LIMIT :offset,:count");
         
         foreach ($sqlBind as $b) {
             if (sizeof($b) != 3) continue;
@@ -225,6 +228,10 @@ class MeshLogEntity {
     public function getError() {
         return $this->error;
     }
+
+     public static function getPublicFields($prefix='t') {
+        throw new Exception(static::class . '::getPublicFields not implemented');
+     }
 }
 
 ?>
