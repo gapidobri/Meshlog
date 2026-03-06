@@ -1963,6 +1963,38 @@ class MeshLog {
                     line2.addTo(this.link_layers);
                 }
 
+                let dist = haversineDistance(path.to.lat, path.to.lon, path.from.lat, path.from.lon);
+                if (dist < 1) {
+                    dist = `${Math.round(dist*1000)} m`;
+                } else {
+                    dist = `${Math.round(dist * 100) / 100} km`;
+                }
+
+                line1.bindTooltip(dist, {
+                    sticky: true,     // follows mouse
+                    direction: 'top'  // optional, tooltip position
+                });
+
+                line2.bindTooltip(dist, {
+                    sticky: true,     // follows mouse
+                    direction: 'top'  // optional, tooltip position
+                });
+
+                const mouseover = function(e) {
+                    line1.setStyle({ color: 'yellow' });
+                    this.openTooltip(); // show tooltip manually
+                }
+
+                const mouseout = function(e) {
+                    line1.setStyle({ color: linkStrokeColor });
+                    this.closeTooltip();
+                }
+
+                line1.on('mouseover', mouseover.bind(line1));
+                line1.on('mouseout', mouseout.bind(line1));
+                line2.on('mouseover', mouseover.bind(line2));
+                line2.on('mouseout', mouseout.bind(line2));
+
                 // Circle
                 if (path.circle && !circles.includes(circle_id)) {
                     circles.push(circle_id);
