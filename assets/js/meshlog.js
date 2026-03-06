@@ -1156,6 +1156,7 @@ class MeshLog {
 
         // epoch of newest object
         this.latest = 0;
+        this.maxDataAgeMs = 3 * 24 * 60 * 60 * 1000;
         this.window_active = true;
         this.new_messages = {};
 
@@ -1199,6 +1200,11 @@ class MeshLog {
         this.link_layers.addTo(this.map);
 
         this.last = '2025-01-01 00:00:00';
+    }
+
+    isWithinVisibleAge(timestamp) {
+        if (!timestamp) return false;
+        return (Date.now() - timestamp) <= this.maxDataAgeMs;
     }
 
     handleMouseEvent(e) {
@@ -1728,6 +1734,7 @@ class MeshLog {
         Object.entries(this.contacts).forEach(([id,contact]) => {
             let latest = contact.last;
             if (!latest) return;
+            if (!this.isWithinVisibleAge(latest.time)) return;
 
             // Mark dupes
             if (contact.isRepeater()) {
@@ -1758,6 +1765,8 @@ class MeshLog {
     }
 
     addMessage(msg) {
+        if (!this.isWithinVisibleAge(msg.time)) return;
+
         let isnew = msg.dom ? false : true;
         let dom = msg.createDom();
         msg.updateDom();
@@ -1889,7 +1898,7 @@ class MeshLog {
         let matchDist = 99999;
 
         Object.entries(this.contacts).forEach(([k,c]) => {
-            if (c.checkHash(hash) && c.adv && !c.isVeryExpired() && (!repeater || c.isRepeater())) {
+            if (c.checkHash(hash) && c.adv && !c.isExpired() && (!repeater || c.isRepeater())) {
                 let current = [c.adv.data.lat, c.adv.data.lon];
                 if (current[0] == 0 && current[1] == 0) return;
 
