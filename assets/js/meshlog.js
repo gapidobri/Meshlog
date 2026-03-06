@@ -117,7 +117,7 @@ class MeshLogContact extends MeshLogObject {
         this.marker = null;
 
         this.flags.dupe = false;
-        this.hash = data.public_key.substr(0, 2).toLowerCase();
+        this.hash = data.public_key.substr(0, 2 * data.hash_size).toLowerCase();
         this.neighbors_visible = false;
 
         if (data.advertisement) {
@@ -572,7 +572,7 @@ class MeshLogContact extends MeshLogObject {
         if (!this.dom) return;
         if (!this.adv) return;
 
-        let hashstr = this.data.public_key.substr(0,2);
+        let hashstr = this.hash;
 
         this.dom.container.dataset.type = this.adv.data.type;
         this.dom.container.dataset.time = this.last.time;
@@ -1716,7 +1716,7 @@ class MeshLog {
         let repHashes = {};
         Object.entries(this.contacts).forEach(([id,contact]) => {
             if (contact.isRepeater()) {
-                let hashstr = contact.data.public_key.substr(0,2);
+                let hashstr = contact.hash;
                 if (!repHashes.hasOwnProperty(hashstr)) {
                     repHashes[hashstr] = 1;
                 } else {
@@ -1731,7 +1731,7 @@ class MeshLog {
 
             // Mark dupes
             if (contact.isRepeater()) {
-                let hashstr = contact.data.public_key.substr(0,2);
+                let hashstr = contact.hash;
                 let count = repHashes[hashstr];
                 contact.flags.dupe = count > 1;
             }

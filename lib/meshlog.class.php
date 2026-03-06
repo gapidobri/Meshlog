@@ -19,7 +19,7 @@ define("DEFAULT_COUNT", 500);
 
 class MeshLog {
     private $error = '';
-    private $version = 6;
+    private $version = 7;
     private $settings = array(
         MeshlogSetting::KEY_DB_VERSION => 0,
         MeshlogSetting::KEY_MAX_CONTACT_AGE => 1814400,
@@ -182,6 +182,7 @@ class MeshLog {
 
         if ($contact) {
             $contact->name = $data['contact']['name'];
+            $contact->hash_size = $data['hash_size'];
         } else {
             $contact = MeshLogContact::fromJson($data, $this);
             $contact->name = $data['contact']['name'];
@@ -676,6 +677,7 @@ class MeshLog {
                 t.id,
                 t.public_key,
                 t.name,
+                t.hash_size,
                 t.last_heard_at,
                 t.created_at,
 
