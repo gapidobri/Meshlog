@@ -182,7 +182,9 @@ class MeshLog {
 
         if ($contact) {
             $contact->name = $data['contact']['name'];
-            $contact->hash_size = $data['hash_size'];
+            if (array_key_exists('hash_size', $data)) {
+                $contact->hash_size = $data['hash_size'];
+            }
         } else {
             $contact = MeshLogContact::fromJson($data, $this);
             $contact->name = $data['contact']['name'];
