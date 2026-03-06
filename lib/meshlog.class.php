@@ -23,7 +23,9 @@ class MeshLog {
     private $settings = array(
         MeshlogSetting::KEY_DB_VERSION => 0,
         MeshlogSetting::KEY_MAX_CONTACT_AGE => 1814400,
-        MeshlogSetting::KEY_MAX_GROUPING_AGE => 21600
+        MeshlogSetting::KEY_MAX_GROUPING_AGE => 21600,
+        MeshlogSetting::KEY_INFLUXDB_URL => "",
+        MeshlogSetting::KEY_INFLUXDB_DB => "Meshlog"
     );
 
     function __construct($config) {
@@ -315,6 +317,31 @@ class MeshLog {
         return $saved;
     }
 
+    private function writeInfluxDb($line) {
+        $influxHost = $this->getConfig(MeshlogSetting::KEY_INFLUXDB_URL, "");
+        $database   = $this->getConfig(MeshlogSetting::KEY_INFLUXDB_DB, ""); 
+
+        if (empty($influxHost) || empty($database)) return;
+
+        $url = "$influxHost/write?db=" . urlencode($database);
+
+        // Initialize cURL
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $line);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+        $response = curl_exec($ch);
+        $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpcode >= 400) {
+            return "Error $httpcode: $response for request $line";
+        }
+
+        return "";
+    }
+
     private function insertTelemetry($data, $reporter) {
         if (!$reporter) return $this->repError('no reporter');
 
@@ -341,9 +368,6 @@ class MeshLog {
 
         $res = $tel->save($this);
         if ($res) {
-            $influxHost = "http://influx.99.anrijs.lv:8086";
-            $database   = "SandboxZ";
-
             $errors = "";
 
             $data = json_decode($tel->data, true);
@@ -354,22 +378,10 @@ class MeshLog {
                     $na = $chan['name'];
                     $va = $chan['value'];
 
-                    $cdata = "mc_$na,contact=$pubkey,type=$ty,ch=$ch,name=$cname value=$va";
-
-                    $url = "$influxHost/write?db=" . urlencode($database);
-
-                    // Initialize cURL
-                    $ch = curl_init($url);
-                    curl_setopt($ch, CURLOPT_POST, 1);
-                    curl_setopt($ch, CURLOPT_POSTFIELDS, $cdata);
-                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-
-                    $response = curl_exec($ch);
-                    $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                    curl_close($ch);
-
-                    if ($httpcode >= 400) {
-                        $errors .= "Error $httpcode: $response for request $cdata\n";
+                    $line = "mc_$na,contact=$pubkey,type=$ty,ch=$ch,name=$cname value=$va";
+                    $error = $this->writeInfluxDb($line);
+                    if (!empty($error)) {
+                        $errors .= $error . "\n";
                     }
                 }
             }
@@ -395,9 +407,33 @@ class MeshLog {
     // TODO
     private function insertSelfReport($data, $reporter) {
         if (!$reporter) return;
+        if (!$data['contact'] || !$data['sys']) return;
+
         $lat = $data['contact']['lat'] ?? null;
         $lon = $data['contact']['lon'] ?? null;
-        $reporter->updateLocation($this, $lat, $lon);
+
+        $vdata = array(
+            "version" => $data['sys']['version'] ?? null
+        );
+
+        $reporter->updateLocation($this, $lat, $lon, $vdata);
+
+        $pubkey = $data['contact']['pubkey'];
+        $heap_total = $data['sys']['heap_total'];
+        $heap_free = $data['sys']['heap_free'];
+        $rssi = $data['sys']['rssi'];
+        $uptime = $data['sys']['uptime'];
+
+        $cname = str_replace(
+            " ",
+            "\\ ",
+            $data['contact']['name']
+        );
+
+        $cname = str_replace("\"", "", $cname);
+
+        $line = "mc_reporter,contact=$pubkey,name=$cname heap_total=$heap_total,heap_free=$heap_free,rssi=$rssi,uptime=$uptime";
+        $error = $this->writeInfluxDb($line);
     }
 
     private function repError($msg) {
