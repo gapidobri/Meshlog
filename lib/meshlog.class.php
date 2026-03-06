@@ -22,7 +22,8 @@ class MeshLog {
     private $version = 6;
     private $settings = array(
         MeshlogSetting::KEY_DB_VERSION => 0,
-        MeshlogSetting::KEY_MAX_CONTACT_AGE => 1814400
+        MeshlogSetting::KEY_MAX_CONTACT_AGE => 1814400,
+        MeshlogSetting::KEY_MAX_GROUPING_AGE => 21600
     );
 
     function __construct($config) {
@@ -189,10 +190,10 @@ class MeshLog {
         $adv = MeshLogAdvertisement::fromJson($data, $this);
         $adv->contact_ref = $contact;
 
-        // 2 min grouping
+        // Time grouping
         // Can't use sent_at. Device after reboot might send advert
         // with bad date, making hash duplicate with older messages
-        $minage = date("Y-m-d H:i:s", time() - 120);
+        $minage = date("Y-m-d H:i:s", time() -  $this->getConfig(MeshlogSetting::KEY_MAX_GROUPING_AGE));
         $existing = MeshLogAdvertisement::findBy(
             "hash",
             $adv->hash,
@@ -235,10 +236,10 @@ class MeshLog {
         $dm = MeshLogDirectMessage::fromJson($data, $this);
         $dm->contact_ref = $contact;
 
-        // 2 min grouping
+        // Time grouping
         // Can't use sent_at. Device after reboot might send advert
         // with bad date, making hash duplicate with older messages
-        $minage = date("Y-m-d H:i:s", time() - 120);
+        $minage = date("Y-m-d H:i:s", time() -  $this->getConfig(MeshlogSetting::KEY_MAX_GROUPING_AGE));
         $existing = MeshLogDirectMessage::findBy(
             "hash",
             $dm->hash,
@@ -290,10 +291,10 @@ class MeshLog {
         $grpmsg->contact_ref = $contact;
         $grpmsg->channel_ref = $channel;
 
-        // 2 min grouping
+        // Time grouping
         // Can't use sent_at. Device after reboot might send advert
         // with bad date, making hash duplicate with older messagesq
-        $minage = date("Y-m-d H:i:s", time() - 120);
+        $minage = date("Y-m-d H:i:s", time() -  $this->getConfig(MeshlogSetting::KEY_MAX_GROUPING_AGE));
         $existing = MeshLogChannelMessage::findBy("hash", $grpmsg->hash, $this, array('created_at' => array('operator' => '>', 'value' => $minage)));
 
         if ($existing) {
