@@ -445,7 +445,21 @@ class MeshLog {
         $params['where'] = array(
             'authorized = 1'
         );
-        return MeshLogReporter::getAll($this, $params);
+        $results = MeshLogReporter::getAll($this, $params);
+
+        // find contact
+        $out = [];
+        foreach ($results['objects'] as $k => $r) {
+            $pk = $r["public_key"];
+            $c = MeshLogContact::findBy("public_key", $pk, $this, array());
+            if ($c) {
+                $r['contact_id'] = $c->getId();
+                $r['contact'] = $c->asArray();
+            }
+            $out[] = $r;
+        }
+
+        return array("objects" => $out);
     }
 
     public function getContacts($params, $adv=FALSE) {
